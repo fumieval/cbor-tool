@@ -22,6 +22,7 @@ executable cbor-tool
                      , time
                      , text
                      , bytestring
+                     , directory
                      , lens
                      , ansi-terminal
   default-language:    Haskell2010

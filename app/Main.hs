@@ -9,6 +9,8 @@ import Control.Lens hiding (List, Context(..))
 import Control.Monad
 import System.IO
 import System.Console.ANSI
+import qualified Data.Text as T
+import System.Directory
 
 data Doc = DStr String | DBrackets [Doc] | DBraces [Doc] | DDocs [Doc]
 
@@ -55,15 +57,35 @@ showDoc n (DBraces xs)
   where
     ss = map (showDoc (n + 2)) xs
 
+showPattern :: Term -> String
+showPattern (TString s) = T.unpack s
+showPattern t = "'" ++ showDoc 0 (diag t) ++ "'"
+
+completion :: Term -> Int -> [String] -> [String]
+completion (TMap xs) 0 (s:_) = [d | (k, _) <- xs, let d = showPattern k, isPrefixOf s d]
+completion (TMap xs) 0 _ = map (showPattern . fst) xs
+completion (TMap xs) n ("_":ss) = [r | (_, v) <- xs, r <- completion v (n - 1) ss]
+completion (TMap xs) n (s:ss) = [r | (k, v) <- xs, let d = showPattern k, s == d, r <- completion v (n - 1) ss]
+completion _ _ _ = []
+
+access :: Term -> [String] -> [Doc]
+access (TMap xs) ("_":ss) = [r | (_, v) <- xs, r <- access v ss]
+access (TMap xs) (s:ss) = [r | (k, v) <- xs, s == showPattern k, r <- access v ss]
+access t _ = [diag t]
+
+runCompletion :: Int -> [String] -> IO ()
+runCompletion n ("--bash-completion-word" : "cbor-tool" : xs) = runCompletion (n - 1) xs
+runCompletion 0 ("--bash-completion-word" : path : _) = getDirectoryContents "." >>= mapM_ putStrLn . filter (isPrefixOf path)
+runCompletion 0 _ = getDirectoryContents "." >>= mapM_ putStrLn
+runCompletion n ("--bash-completion-word" : path : xs) = do
+    term <- deserialise <$> BL.readFile path
+    mapM_ putStrLn $ completion term (n - 1) $ filter (/="--bash-completion-word") xs
+
+parseArgs :: [String] -> IO ()
+parseArgs ("--bash-completion-index" : n : xs) = runCompletion (read n) xs
+parseArgs (path : xs) = do
+    term <- deserialise <$> BL.readFile path
+    mapM_ (putStrLn . showDoc 0) $ access term xs
+
 main :: IO ()
-main = do
-  args <- getArgs
-  hPutStrLn stderr $ show args
-  if
-    | "--multiple" `elem` args -> forever $ do
-      n <- read <$> getLine
-      term <- deserialise <$> BL.hGet stdin n
-      putStrLn $ showDoc 0 $ diag term
-    | otherwise -> do
-      term <- deserialise <$> BL.getContents
-      putStrLn $ showDoc 0 $ diag term
+main = getArgs >>= parseArgs
