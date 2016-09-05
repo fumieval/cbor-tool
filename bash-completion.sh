@@ -13,4 +13,4 @@ _cbor_tool()
     COMPREPLY=( $(cbor-tool "${CMDLINE[@]}") )
 }
 
-complete -o filenames -F _cbor_tool cbor-tool
+complete -o filenames -o noquote -F _cbor_tool cbor-tool

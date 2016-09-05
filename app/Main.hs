@@ -11,6 +11,8 @@ import System.IO
 import System.Console.ANSI
 import qualified Data.Text as T
 import System.Directory
+import Debug.Trace
+import Data.Char
 
 data Doc = DStr String | DBrackets [Doc] | DBraces [Doc] | DDocs [Doc]
 
@@ -70,8 +72,13 @@ completion _ _ _ = []
 
 access :: Term -> [String] -> [Doc]
 access (TMap xs) ("_":ss) = [r | (_, v) <- xs, r <- access v ss]
-access (TMap xs) (s:ss) = [r | (k, v) <- xs, s == showPattern k, r <- access v ss]
+access (TMap xs) (s:ss) = [r | (k, v) <- xs, quoted s == showPattern k, r <- access v ss]
 access t _ = [diag t]
+
+quoted :: String -> String
+quoted str
+    | all (\c -> isAlphaNum c || c `elem` ("-./" :: String)) str = str
+    | otherwise = "'" ++ concatMap (\c -> if c == '\'' then "\\'" else [c]) str ++ "'"
 
 runCompletion :: Int -> [String] -> IO ()
 runCompletion n ("--bash-completion-word" : "cbor-tool" : xs) = runCompletion (n - 1) xs
