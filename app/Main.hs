@@ -68,11 +68,13 @@ completion (TMap xs) 0 (s:_) = [d | (k, _) <- xs, let d = showPattern k, isPrefi
 completion (TMap xs) 0 _ = map (showPattern . fst) xs
 completion (TMap xs) n ("_":ss) = [r | (_, v) <- xs, r <- completion v (n - 1) ss]
 completion (TMap xs) n (s:ss) = [r | (k, v) <- xs, let d = showPattern k, s == d, r <- completion v (n - 1) ss]
+completion (TList xs) n (s:ss) = xs ^.. ix (read s) . folding (\t -> completion t (n - 1) ss)
 completion _ _ _ = []
 
 access :: Term -> [String] -> [Doc]
 access (TMap xs) ("_":ss) = [r | (_, v) <- xs, r <- access v ss]
 access (TMap xs) (s:ss) = [r | (k, v) <- xs, quoted s == showPattern k, r <- access v ss]
+access (TList xs) (s:ss) = xs ^.. ix (read s) . folding (\t -> access t ss)
 access t _ = [diag t]
 
 quoted :: String -> String
@@ -90,6 +92,10 @@ runCompletion n ("--bash-completion-word" : path : xs) = do
 
 parseArgs :: [String] -> IO ()
 parseArgs ("--bash-completion-index" : n : xs) = runCompletion (read n) xs
+parseArgs ("--multiple" : xs) = forever $ do
+    n <- readLn
+    term <- deserialise <$> BL.hGet stdin n
+    mapM_ (putStrLn . showDoc 0) $ access term xs
 parseArgs (path : xs) = do
     term <- deserialise <$> BL.readFile path
     mapM_ (putStrLn . showDoc 0) $ access term xs
